@@ -1,0 +1,105 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pgpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-payments_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pguser} -d ${POSTGRES_DB:-payments_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: payment-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pguser}:${POSTGRES_PASSWORD:-pgpassword}@postgres:5432/${POSTGRES_DB:-payments_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pguser}:${POSTGRES_PASSWORD:-pgpassword}@postgres:5432/${POSTGRES_DB:-payments_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3002
+    ports:
+      - "3002:3002"
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    restart: unless-stopped
+    environment:
+      PAYMENT_SERVICE_URL: http://payment-service:3001
+      NOTIFICATION_SERVICE_URL: http://notification-service:3002
+      JWT_SECRET: ${JWT_SECRET:-PRUEBA_TECNICA_SECRET_KEY}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    networks:
+      - backend
+    depends_on:
+      - payment-service
+      - notification-service
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:

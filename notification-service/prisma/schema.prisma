@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Notification {
+  id            String             @id @default(uuid()) @db.Uuid
+  transactionId String             @db.Uuid @map("transaction_id")
+  merchantId    String             @db.Uuid @map("merchant_id")
+  eventType     String             @map("event_type")
+  payload       Json
+  status        NotificationStatus @default(pending)
+  attempts      Int                @default(0)
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  @@index([merchantId])
+  @@index([transactionId])
+  @@index([status])
+  @@map("notifications")
+}
+
+enum NotificationStatus {
+  pending
+  sent
+  failed
+}

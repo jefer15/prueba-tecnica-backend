@@ -6,3 +6,5 @@ node_modules/
 # Documentos internos del evaluador - NO compartir con candidatos
 evaluacion/
 recursos/
+
+/generated/prisma
